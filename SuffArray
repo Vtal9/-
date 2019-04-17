@@ -1,0 +1,192 @@
+// 2-3.cpp: определяет точку входа для консольного приложения.
+//
+
+#include "stdafx.h"
+#include<vector>
+#include<iostream>
+#include<string>
+#include<algorithm>
+
+//https://contest.yandex.ru/contest/9483/run-report/13363424/
+using std::string;
+using std::vector;
+using std::cout;
+using std::cin;
+using std::max;
+using std::min;
+
+const long ALPHABET_SIZE = 26;
+
+
+//изменяет массив, содержащий количество элементов, в массив содержащий позиции окончания кармана
+void calcPositions(vector<long>& count) {
+	count[0] = 0;
+	count[1] = 1;
+	for (int i = 2; i < count.size(); i++) {
+		count[i] += count[i - 1];
+	}
+
+}
+
+
+long index(char c) {
+	if (c == '$') {
+		return 1;
+	}
+	else if (c == '#') {
+		return 0;
+	}
+	else {
+		return static_cast<long>(c - 'a') + 2;
+	}
+}
+
+//один этап карманной сортировки по длине curLen
+vector<long> stepOfPocketSort(long curLen, long n, vector<long>& suffs, vector<long>& classes) {
+	vector<long> sortedBy2(n);	//сортируем по втрой половине строки
+	for (long i = 0; i < n; ++i) {
+		sortedBy2[i] = (suffs[i] + n - curLen) % n;
+	}
+	vector<long> count(max(ALPHABET_SIZE + 2, n), 0);
+	for (auto by2 : sortedBy2) {	//сортируем по первой половине строки
+		++count[classes[by2]];
+	}
+	calcPositions(count);
+	for (long i = n - 1; i >= 0; --i) {
+		suffs[count[classes[sortedBy2[i]]]--] = sortedBy2[i];
+	}
+	vector<long> newClasses(n);
+	long classesN = 0;
+	for (long i = 1; i < n; ++i) {
+		long mid1 = (suffs[i] + curLen) % n;
+		long mid2 = (suffs[i - 1] + curLen) % n;
+		if (classes[suffs[i]] != classes[suffs[i - 1]] || classes[mid1] != classes[mid2]) {
+			++classesN;
+		}
+		newClasses[suffs[i]] = classesN;
+	}
+	return newClasses;
+}
+
+
+//функция строит суффиксный массив по строке
+vector<long> suffArray(string str) {
+
+	//нулевая итерация
+	vector<long> count(max(ALPHABET_SIZE + 2, static_cast<long>(str.length())), 0);
+	for (auto i : str) {
+		++count[index(i)];
+	}
+
+	calcPositions(count);
+
+
+	vector<long> suffs(str.length(), 0);
+	for (long i = 0; i < str.length(); ++i) {
+		suffs[count[index(str[i])]--] = i;
+	}
+
+	vector<long> classes(str.length());
+	long classesN = 0;
+
+	char lastChar = '#';
+	for (auto suf : suffs) {
+		if (str[suf] != lastChar) {
+			lastChar = str[suf];
+			++classesN;
+		}
+		classes[suf] = classesN;
+	}
+	//нулевая итерация завершена
+
+	long curLen = 1;
+	while (curLen <= str.length()) {
+		classes = stepOfPocketSort(curLen, str.length(), suffs, classes);
+		curLen *= 2;
+	}
+	return suffs;
+}
+
+
+//функция строит LCP массив по строке и ее суффмассиву
+vector<long> buildLCP(string str, vector<long> suf) {
+	vector<long> lcp(str.length());
+	vector<long> pos(str.length()); //массив обратный массиву suf
+
+	for (long i = 0; i < str.length(); ++i) {
+		pos[suf[i]] = i;
+	}
+
+	long k = 0;
+	for (long i = 0; i < str.length(); i++) {
+		if (k > 0) {
+			--k;
+		}
+		if (pos[i] == str.length() - 1) {
+			lcp[str.length() - 1] = -1;
+			k = 0;
+		}
+		else {
+			long j = suf[pos[i] + 1];
+			while (max(i + k, j + k) < str.length() && str[i + k] == str[j + k]) {
+				++k;
+			}
+			lcp[pos[i]] = k;
+		}
+	}
+	return lcp;
+}
+
+string kStat(long k, vector<long>& suffArray, vector<long>& lcp, string& s, string& t, string& S) {
+	long curLen = 0;
+
+	for (long i = 0; i < suffArray.size() - 1; ++i) {
+		if (suffArray[i] < s.size() && suffArray[i + 1] > s.size() || suffArray[i] > s.size() && suffArray[i + 1] < s.size()) {
+			if (lcp[i] > 0) {
+				if (curLen < lcp[i]) {
+					if (lcp[i] - curLen < k) {
+						k -= lcp[i] - curLen;
+					}
+					else {
+						k += curLen;
+						string result = "";
+						for (long j = suffArray[i]; j < suffArray[i] + lcp[i]; ++j) {
+							result += S[j];
+							--k;
+							if (k == 0) {
+								return result;
+							}
+						}
+					}
+				}
+			}
+			curLen = lcp[i];
+		}
+		else {
+			curLen = min(lcp[i], curLen);
+		}
+	}
+
+	return "-1";
+}
+
+
+int main()
+{
+	string s;
+	cin >> s;
+	string t;
+	cin >> t;
+
+	string S = s + '$' + t + '#';
+
+	vector<long> suffs = suffArray(S);
+
+	vector<long> lcp = buildLCP(S, suffs);
+
+	long k;
+	cin >> k;
+
+	cout << kStat(k, suffs, lcp, s, t, S);
+	return 0;
+}
