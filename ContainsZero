@@ -1,0 +1,134 @@
+#include<cmath>
+#include<vector>
+#include<iostream>
+
+using std::vector;
+
+const double E = 1e-8;
+
+class CVector {
+public:
+	double x;
+	double y;
+
+	CVector(double _x, double _y) : x(_x), y(_y) {}
+	CVector& operator=(const CVector& other);
+	CVector& operator=(const CVector&& other);
+	CVector friend operator+(const CVector& a, const CVector& b);
+	CVector friend operator*(const double c, const CVector& a);
+	double friend operator*(const CVector& a, const CVector& b);
+	CVector(CVector& other) : x(other.x), y(other.y) {}
+	CVector(CVector&& other) : x(other.x), y(other.y) {}
+	~CVector() {}
+};
+
+
+CVector& CVector::operator=(const CVector& other) {
+	x = other.x;
+	y = other.y;
+	return *this;
+}
+
+CVector& CVector::operator=(const CVector&& other) {
+	x = other.x;
+	y = other.y;
+	return *this;
+}
+
+
+CVector operator+(const CVector& a, const CVector& b) {
+	return CVector(a.x + b.x, a.y + b.y);
+}
+
+CVector operator*(const double c, const CVector& a) {
+	return CVector(a.x * c, a.y * c);
+}
+
+double operator*(const CVector& a, const CVector& b) {
+	return a.x * b.x + a.y * b.y;
+}
+
+
+bool lessPolarAngle(const CVector& first, const CVector& second) {
+	return atan2(first.y, first.x) < atan2(second.y, second.x);
+}
+
+size_t findMinPoint(vector<CVector>& polygon) {
+	size_t min = 0;
+	for (size_t i = 1; i < polygon.size(); ++i) {
+		if (polygon[i].x < polygon[min].x || (polygon[i].x == polygon[min].x && polygon[i].y < polygon[min].y)) {
+			min = i;
+		}
+	}
+	return min;
+}
+
+
+vector<CVector> minkovskiysSumm(vector<CVector>& polygon1, vector<CVector>& polygon2) {
+	vector<CVector> summ;
+	size_t min1 = polygon1.size() - 1 - findMinPoint(polygon1);
+	size_t min2 = polygon2.size() - 1 - findMinPoint(polygon2);
+	std::reverse(polygon1.begin(), polygon1.end());
+	std::reverse(polygon2.begin(), polygon2.end());
+	int i, j;
+	i = j = 0;
+	while (i < polygon1.size() && j < polygon2.size()) {
+		summ.push_back(polygon1[(i + min1) % polygon1.size()] + polygon2[(j + min2) % polygon2.size()]);
+		if (lessPolarAngle(polygon1[(i + min1 + 1) % polygon1.size()] + (-1) * polygon1[(i + min1) % polygon1.size()], polygon2[(j + min2 + 1) % polygon2.size()] + (-1) * polygon2[(j + min2) % polygon2.size()])) {
+			++i;
+		}
+		else if (lessPolarAngle(polygon2[(j + min2 + 1) % polygon2.size()] + (-1) * polygon2[(j + min2) % polygon2.size()], polygon1[(i + min1 + 1) % polygon1.size()] + (-1) * polygon1[(i + min1) % polygon1.size()])) {
+			++j;
+		}
+		else {
+			++i;
+			++j;
+		}
+	}
+	return summ;
+}
+
+
+bool containsZero(vector<CVector>& poligon) {
+	for (size_t i = 0; i < poligon.size(); ++i) {
+		CVector a = poligon[(i + 1) % poligon.size()] + (-1) * poligon[i];
+		CVector b = (-1) * poligon[(i + 1) % poligon.size()];
+		if (a.x * b.y - a.y * b.x < 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
+
+
+
+int main()
+{
+	size_t n;
+	std::cin >> n;
+	vector<CVector> poligon1;
+	for (size_t i = 0; i < n; ++i) {
+		double x, y;
+		std::cin >> x >> y;
+		poligon1.push_back(CVector(x, y));
+	}
+	size_t m;
+	std::cin >> m;
+	vector<CVector> poligon2;
+	for (size_t i = 0; i < m; ++i) {
+		double x, y;
+		std::cin >> x >> y;
+		poligon2.push_back(CVector(-x, -y));
+	}
+
+	vector<CVector> minkSumm = minkovskiysSumm(poligon1, poligon2);
+	if (containsZero(minkSumm)) {
+		std::cout << "YES" << std::endl;
+	}
+	else {
+		std::cout << "NO" << std::endl;
+	}
+    return 0;
+}
+
