@@ -1,0 +1,339 @@
+// haffman1.cpp: определяет точку входа для консольного приложения.
+//
+
+
+#include<iostream>
+#include<vector>
+#include<fstream>
+#include<stack>
+
+/////////////////////////////////////////////////////
+//class binary Writer
+class binaryWriter {
+public:
+	binaryWriter() : bitsCount(0) {}
+	void writeBit(unsigned char bit);
+	void writeByte(unsigned char byte);
+	void output();
+	std::vector<unsigned char> buffer;
+
+private:
+
+	int bitsCount;
+};
+
+
+void binaryWriter::writeBit(unsigned char bit) {
+	if (bitsCount % 8 == 0) {
+		buffer.push_back(bit);
+		bitsCount++;
+		return;
+	}
+	buffer[bitsCount / 8] |= bit << bitsCount % 8;
+	bitsCount++;
+}
+
+
+void binaryWriter::writeByte(unsigned char byte) {
+	if (bitsCount % 8 == 0) {
+		buffer.push_back(byte);
+		bitsCount += 8;
+		return;
+	}
+	int i = bitsCount % 8;
+	while (bitsCount % 8 != 0) {
+		writeBit(byte & 1);
+		byte = byte >> 1;
+	}
+	buffer.push_back(byte);
+	bitsCount += i;
+}
+
+
+void binaryWriter::output() {
+	buffer[1] = 8 - bitsCount % 8;
+	std::ofstream Fout("output.txt");
+	for (int i = 0; i < buffer.size(); i++) {
+		Fout << buffer[i];
+	}
+}
+//////////////////////////////////////////////////////////////
+//class binary reader
+
+class binaryReader {
+public:
+	binaryReader() : bitsCount(0) {}
+	unsigned char readByte();
+	unsigned char readBit();
+	void addToBuffer(unsigned char a);
+	unsigned char getBitsCount() { return bitsCount; }
+	unsigned int getSizeOfBuffer() { return buffer.size(); }
+	void fixLastByte(unsigned char trash);
+
+private:
+	std::vector<unsigned char> buffer;
+	unsigned char bitsCount;
+
+};
+
+
+void binaryReader::fixLastByte(unsigned char trash) {
+	buffer[buffer.size() - 1] = (buffer[buffer.size() - 1] << trash) >> trash;
+}
+
+void binaryReader::addToBuffer(unsigned char a) {
+	buffer.push_back(a);
+}
+
+
+unsigned char binaryReader::readByte() {
+	if (bitsCount % 8 == 0) {
+		bitsCount += 8;
+		return buffer[bitsCount / 8 - 1];
+	}
+	unsigned char result;
+	unsigned char bitsToRead = bitsCount % 8;//количество бит которые осталось считать
+	result = buffer[bitsCount / 8] >> bitsCount % 8;//считаем первую часть байта
+	bitsCount = (bitsCount / 8 + 1) * 8;
+	for (int i = 0; i < bitsToRead; i++) {
+		result = result | (readBit() << (i + 8 - bitsToRead));
+	}
+	return result;
+}
+
+
+unsigned char binaryReader::readBit() {
+	unsigned char result;
+	result = buffer[bitsCount / 8] << (7 - bitsCount % 8);
+	result = result >> 7;
+	bitsCount++;
+	return result;
+}
+
+/////////////////////////////////////////////////////////////
+
+struct Node {
+	unsigned char symbol;
+	int count;
+	Node* Left;
+	Node* Right;
+
+	Node(char symbol) : symbol(symbol), count(1), Left(nullptr), Right(nullptr) {}
+	Node(Node* left, Node* right) : count(left->count + right->count), Left(left), Right(right) {}
+};
+
+
+void siftDown(std::vector<Node*>& alphabet, int i) {
+	int left = 2 * i + 1;
+	int right = 2 * i + 2;
+
+	int min = i;
+	if (left<alphabet.size() && alphabet[left]->count < alphabet[i]->count) {
+		min = left;
+	}
+	if (right < alphabet.size() && alphabet[right]->count < alphabet[min]->count) {
+		min = right;
+	}
+	if (min != i) {
+		std::swap(alphabet[i], alphabet[min]);
+		siftDown(alphabet, min);
+	}
+}
+
+void buildHeap(std::vector<Node*>& alphabet) {
+	for (int i = alphabet.size() / 2 - 1; i >= 0; i--) {
+		siftDown(alphabet, i);
+	}
+}
+
+Node* extractMin(std::vector<Node*>& alphabet) {
+	Node* result = alphabet[0];
+	std::swap(alphabet[0], alphabet[alphabet.size() - 1]);
+	alphabet.pop_back();
+	if (alphabet.size() != 0) {
+		siftDown(alphabet, 0);
+	}
+	return result;
+}
+
+void siftUp(std::vector<Node*>& alphabet, int i) {
+	while (i > 0) {
+		int parent = (i - 1) / 2;
+		if (alphabet[i]->count > alphabet[parent]->count) {
+			return;
+		}
+		std::swap(alphabet[i], alphabet[parent]);
+		i = parent;
+	}
+}
+
+void add(std::vector<Node*>& alphabet, Node* element) {
+	alphabet.push_back(element);
+	siftUp(alphabet, alphabet.size() - 1);
+	siftDown(alphabet, 0);
+	return;
+}
+
+
+void dfs(std::vector<std::vector<unsigned char>>& tableDecode, std::vector<unsigned char>& path, Node* root) {
+	if (root->Left == nullptr) {
+		tableDecode[root->symbol] = path;
+		return;
+	}
+	path.push_back(0);
+	dfs(tableDecode, path, root->Left);
+	path.pop_back();
+	path.push_back(1);
+	dfs(tableDecode, path, root->Right);
+	path.pop_back();
+	return;
+}
+
+
+//функция кодирования дерева кодировки
+void encodeTree(Node* root, binaryWriter& writer) {
+	if (root->Left == nullptr) {
+		writer.writeBit(1);
+		writer.writeByte(root->symbol);
+		return;
+	}
+	encodeTree(root->Left, writer);
+	encodeTree(root->Right, writer);
+	writer.writeBit(0);
+	return;
+}
+
+
+void Encode() {
+	////////////////////////////////////////////////////////////////////////////////////////
+
+	//создаем алфавит и собираем статистику встречу символов
+	std::vector<Node*> alphabet;
+
+	std::ifstream Fin("input.txt");
+
+	while (!Fin.eof()) {
+		char symb = Fin.get();
+		if (symb == -1) {
+			break;
+		}
+		int i;
+		for (i = 0; i < alphabet.size(); i++) {//проверим записали ли мы уже буквы в алфавит
+			if (alphabet[i]->symbol == symb) {
+				break;
+			}
+		}
+		if (i == alphabet.size()) {//если буквы не встретилось
+			alphabet.push_back(new Node(symb));
+		}
+		else {
+			alphabet[i]->count++;//увеличим число раз появления символа
+		}
+	}
+	////////////////////////////////////////////////////////////////////////////////////////
+
+	binaryWriter outputStream;
+	outputStream.writeByte(alphabet.size());//запишем размер алфавита
+	outputStream.writeByte(0);//зарезервируем место для количества мусора в конце
+
+	buildHeap(alphabet);//построим min-heap 
+
+						////////////////////////////////////////////////////////////////////////////////////////
+
+						//строим дерево декодирования
+	int sizeOfAlphabet = alphabet.size();
+	for (int i = 0; i < sizeOfAlphabet - 1; i++) {
+		add(alphabet, new Node(extractMin(alphabet), extractMin(alphabet)));
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+
+	//таблица для кодирования
+	std::vector<unsigned char> path;
+	std::vector<std::vector<unsigned char>> tableDecode(256);
+	Node* root = alphabet[0];
+	dfs(tableDecode, path, root);
+	encodeTree(root, outputStream);//запишем закодированное дерево
+
+								   ////////////////////////////////////////////////////////////////////////////////////////
+	Fin.close();
+	std::ifstream Fin1("input.txt");
+	while (!Fin1.eof()) {//запишем закодированную информацию
+		unsigned char a = Fin1.get();
+		if (a == 255) {
+			break;
+		}
+		for (int i = 0; i < tableDecode[a].size(); i++) {
+			outputStream.writeBit(tableDecode[a][i]);
+		}
+	}
+	outputStream.output();
+}
+//////////////////////////////////////////////////////////////////////////////////////////////
+//декодирование
+Node* decodeTree(unsigned char sizeOfAlphabet, binaryReader& reader) {
+	int i = 0;
+	std::stack<Node*> Stack;
+	Node* root = nullptr;
+	while (i < sizeOfAlphabet || Stack.size() != 1) {
+		unsigned char a = reader.readBit();
+		if (a == 1) {
+			Node* node = new Node(reader.readByte());
+			Stack.push(node);
+			i++;
+		}
+		else {
+			Node* right = Stack.top();
+			Stack.pop();
+			Node* left = Stack.top();
+			Stack.pop();
+			Node* node = new Node(left, right);
+			Stack.push(node);
+		}
+
+	}
+	root = Stack.top();
+	return root;
+}
+
+
+
+
+void Decode() {
+
+	std::ifstream F("output.txt");
+	binaryReader reader;
+	while (!F.eof()) {//заполняем буфер
+		unsigned char byte = F.get();
+		if (byte == 255) {
+			break;
+		}
+		reader.addToBuffer(byte);
+	}
+	unsigned char size = reader.readByte();
+	unsigned char trash = reader.readByte();
+	reader.fixLastByte(trash);
+	Node* root = decodeTree(size, reader);
+	Node* cur = root;
+	std::ofstream F2("output.txt");
+	for (int i = reader.getBitsCount() - 1; i < reader.getSizeOfBuffer() * 8 - trash; i++) {//декодирование последовательности
+		if (!reader.readBit()) {
+			cur = cur->Left;
+		}
+		else {
+			cur = cur->Right;
+		}
+		if (cur->Left == nullptr) {
+			F2 << cur->symbol;
+			cur = root;
+		}
+	}
+
+}
+
+int main()
+{
+	Encode();
+	Decode();
+	return 0;
+}
